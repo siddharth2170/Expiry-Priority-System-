@@ -6,8 +6,8 @@ from datetime import date
 class DonationRecord:
     record_id: str
     food_id: str
-    donor_id: str
-    recipient_id: str
+    from_foodbank_id: str
+    to_foodbank_id: str
     quantity: int
-    donation_date: date
+    transfer_date: date
     status: str

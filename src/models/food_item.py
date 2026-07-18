@@ -10,7 +10,7 @@ class FoodItem:
     quantity: int
     unit: str
     expiry_date: date
-    donor_id: str
+    foodbank_id: str
     storage_type: str
     status: str = "Available"
 
