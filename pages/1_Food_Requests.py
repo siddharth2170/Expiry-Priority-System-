@@ -1,11 +1,9 @@
-from datetime import date
-
 import streamlit as st
 
 from src.app_state import add_request, get_requests
 from src.constants import CATEGORIES
 from src.data import OUR_FOODBANK
-from src.models import FoodRequest
+from src.models import FoodRequest, Urgency
 from src.utils import generate_request_id
 
 st.set_page_config(page_title="Food Requests", page_icon="📝", layout="wide")
@@ -23,7 +21,11 @@ with st.form("add_request_form", clear_on_submit=True):
         quantity = st.number_input("Quantity Needed", min_value=1, value=1, step=1)
 
     with col2:
-        request_date = st.date_input("Needed By", min_value=date.today())
+        urgency = st.selectbox(
+            "Urgency",
+            list(Urgency),
+            format_func=lambda u: u.label,
+        )
 
     submitted = st.form_submit_button("Submit Request")
 
@@ -33,7 +35,7 @@ if submitted:
         foodbank_id=OUR_FOODBANK.foodbank_id,
         category=category,
         quantity=int(quantity),
-        request_date=request_date,
+        urgency=urgency,
     )
     add_request(request)
     st.success(f"Request {request.request_id} submitted for {request.quantity} x {request.category}.")
@@ -51,7 +53,8 @@ else:
             "Request ID": r.request_id,
             "Category": r.category,
             "Quantity": r.quantity,
-            "Needed By": r.request_date.strftime("%Y-%m-%d"),
+            "Urgency": r.urgency.label,
+            "Submitted": r.submitted_at.strftime("%Y-%m-%d"),
         }
         for r in requests
     ]
