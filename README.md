@@ -45,6 +45,25 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
+## Running the tests
+
+The test suite uses Python's built-in `unittest` (no extra dependencies). From
+the project root:
+
+```bash
+python3 -m unittest discover -s tests -t .
+```
+
+Add `-v` for verbose, per-test output:
+
+```bash
+python3 -m unittest discover -s tests -t . -v
+```
+
+The tests cover the custom `PriorityQueue`, the batch-based `FoodItem`/`Batch`
+model, the `Inventory` ordering and lazy deletion, the `ExpiryLog`, and
+`FoodRequest` validation.
+
 ## App structure
 
 - **Food Rescue Network** (`app.py`) — home page with a map of our foodbank and
