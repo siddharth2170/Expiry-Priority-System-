@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from src.models import Batch, Foodbank, FoodItem
+from src.models import Batch, Foodbank, FoodItem, FoodRequest, Urgency
 
 # Our own foodbank ("Central Hub"). Coordinates are placeholders (San Francisco).
 OUR_FOODBANK = Foodbank(
@@ -314,3 +314,41 @@ OUR_INVENTORY = [
 
 # Attach our seeded inventory to our foodbank.
 OUR_FOODBANK.food_items = OUR_INVENTORY
+
+# Seeded requests raised by our foodbank. Submission dates are relative to today
+# so the aging behavior of the RequestQueue is visible: the long-waiting routine
+# request below has aged enough to outrank the fresh critical one.
+SAMPLE_REQUESTS = [
+    FoodRequest(
+        request_id="REQ-1001",
+        foodbank_id=OUR_FOODBANK.foodbank_id,
+        category="Bakery",
+        quantity=20,
+        urgency=Urgency.CRITICAL,
+        submitted_at=date.today() - timedelta(days=1),
+    ),
+    FoodRequest(
+        request_id="REQ-1002",
+        foodbank_id=OUR_FOODBANK.foodbank_id,
+        category="Dairy",
+        quantity=30,
+        urgency=Urgency.LOW,
+        submitted_at=date.today() - timedelta(days=12),
+    ),
+    FoodRequest(
+        request_id="REQ-1003",
+        foodbank_id=OUR_FOODBANK.foodbank_id,
+        category="Vegetables",
+        quantity=15,
+        urgency=Urgency.ROUTINE,
+        submitted_at=date.today() - timedelta(days=3),
+    ),
+    FoodRequest(
+        request_id="REQ-1004",
+        foodbank_id=OUR_FOODBANK.foodbank_id,
+        category="Grains",
+        quantity=40,
+        urgency=Urgency.ROUTINE,
+        submitted_at=date.today() - timedelta(days=65),
+    ),
+]

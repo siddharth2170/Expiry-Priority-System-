@@ -1,8 +1,11 @@
+from datetime import date
+
 import streamlit as st
 
 from src.app_state import add_request, get_requests
 from src.constants import CATEGORIES
 from src.data import OUR_FOODBANK
+from src.data_structures.request_queue import RequestQueue
 from src.models import FoodRequest, Urgency
 from src.utils import generate_request_id
 
@@ -48,14 +51,22 @@ requests = get_requests()
 if not requests:
     st.info("No requests yet. Raise one above.")
 else:
+    st.caption(
+        "Ordered by priority — a blend of urgency and how long a request has "
+        "waited, so long-neglected requests rise over time."
+    )
+    today = date.today()
+    queue = RequestQueue.from_requests(requests, today)
     rows = [
         {
+            "Priority": rank,
             "Request ID": r.request_id,
             "Category": r.category,
             "Quantity": r.quantity,
             "Urgency": r.urgency.label,
+            "Days Waiting": (today - r.submitted_at).days,
             "Submitted": r.submitted_at.strftime("%Y-%m-%d"),
         }
-        for r in requests
+        for rank, r in enumerate(queue.pending(today), start=1)
     ]
     st.dataframe(rows, use_container_width=True, hide_index=True)

@@ -2,7 +2,7 @@ import copy
 
 import streamlit as st
 
-from src.data import OUR_INVENTORY
+from src.data import OUR_INVENTORY, SAMPLE_REQUESTS
 from src.models import FoodItem, FoodRequest
 
 INVENTORY_KEY = "our_inventory"
@@ -13,7 +13,7 @@ def _ensure_state() -> None:
     if INVENTORY_KEY not in st.session_state:
         st.session_state[INVENTORY_KEY] = copy.deepcopy(OUR_INVENTORY)
     if REQUESTS_KEY not in st.session_state:
-        st.session_state[REQUESTS_KEY] = []
+        st.session_state[REQUESTS_KEY] = copy.deepcopy(SAMPLE_REQUESTS)
 
 
 def get_inventory() -> list[FoodItem]:

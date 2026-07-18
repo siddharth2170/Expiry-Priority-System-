@@ -1,1 +1,7 @@
-from .sample_data import OUR_FOODBANK, OUR_LOCATION, FOODBANKS, OUR_INVENTORY
+from .sample_data import (
+    OUR_FOODBANK,
+    OUR_LOCATION,
+    FOODBANKS,
+    OUR_INVENTORY,
+    SAMPLE_REQUESTS,
+)
