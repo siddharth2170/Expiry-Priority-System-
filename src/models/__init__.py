@@ -1,3 +1,4 @@
+from .batch import Batch
 from .foodbank import Foodbank
 from .food_item import FoodItem
 from .urgency import Urgency

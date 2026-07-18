@@ -5,22 +5,14 @@ import streamlit as st
 from streamlit_folium import st_folium
 
 from src.data import FOODBANKS, OUR_FOODBANK
-from src.data_structures.priority_queue import PriorityQueue
+from src.data_structures.expiry_log import ExpiryLog
+from src.data_structures.inventory import Inventory
 
 st.set_page_config(
     page_title="Food Rescue Network",
     page_icon="🍎",
     layout="wide",
 )
-
-
-def order_by_expiry(food_items):
-    """Return food items soonest-to-expire first, ordered via the min-heap."""
-    pq = PriorityQueue()
-    for item in food_items:
-        pq.push(item, item.expiry_date.toordinal())
-    return [pq.pop() for _ in range(len(pq))]
-
 
 st.title("Food Rescue Network")
 st.caption("Foodbank locations across the network")
@@ -63,7 +55,7 @@ with panel_col:
         st.subheader(selected.name)
         st.caption(f"{selected.foodbank_id} · {selected.address}")
 
-        ordered = order_by_expiry(selected.food_items)
+        ordered = Inventory.from_foodbank(selected).items()
 
         if not ordered:
             st.info("No inventory recorded for this foodbank.")
@@ -73,10 +65,42 @@ with panel_col:
             rows = [
                 {
                     "Food": item.name,
-                    "Qty": f"{item.quantity} {item.unit}",
-                    "Expiry": item.expiry_date.strftime("%Y-%m-%d"),
-                    "Days Left": (item.expiry_date - today).days,
+                    "Qty": f"{batch.quantity} {item.unit}",
+                    "Expiry": batch.expiry_date.strftime("%Y-%m-%d"),
+                    "Days Left": (batch.expiry_date - today).days,
                 }
-                for item in ordered
+                for item, batch in ordered
+            ]
+            st.dataframe(rows, use_container_width=True, hide_index=True)
+
+st.divider()
+st.subheader("Expired items across the network")
+
+all_foodbanks = [OUR_FOODBANK] + FOODBANKS
+expiry_log = ExpiryLog.from_foodbanks(all_foodbanks)
+
+if len(expiry_log) == 0:
+    st.success("No expired items recorded across the network.")
+else:
+    st.caption(
+        f"{len(expiry_log)} expired batches · "
+        f"{expiry_log.total_expired_quantity()} units total"
+    )
+    today = date.today()
+    name_by_id = {fb.foodbank_id: fb.name for fb in all_foodbanks}
+    grouped = expiry_log.grouped_by_foodbank()
+
+    for fb_id in sorted(grouped):
+        entries = grouped[fb_id]
+        fb_name = name_by_id.get(fb_id, fb_id)
+        with st.expander(f"{fb_name} — {len(entries)} expired", expanded=True):
+            rows = [
+                {
+                    "Food": item.name,
+                    "Qty": f"{batch.quantity} {item.unit}",
+                    "Expired On": batch.expiry_date.strftime("%Y-%m-%d"),
+                    "Days Ago": (today - batch.expiry_date).days,
+                }
+                for item, batch in entries
             ]
             st.dataframe(rows, use_container_width=True, hide_index=True)
