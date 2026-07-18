@@ -11,3 +11,7 @@ def generate_food_id() -> str:
 
 def generate_request_id() -> str:
     return generate_id("REQ")
+
+
+def generate_donation_id() -> str:
+    return generate_id("DON")

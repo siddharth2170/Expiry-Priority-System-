@@ -352,3 +352,53 @@ SAMPLE_REQUESTS = [
         submitted_at=date.today() - timedelta(days=65),
     ),
 ]
+
+# Requests raised by the other foodbanks in the network. Each requester's
+# category is stocked by at least two *other* banks, so the matching engine has
+# multiple candidate sources to rank (top-2) and the demo shows the engine at
+# work network-wide, not just from our own hub.
+CROSS_REQUESTS = [
+    FoodRequest(
+        request_id="REQ-2001",
+        foodbank_id="FB001",  # Mission needs Grains (FB000 Beans, FB002 Rice, FB004 Pasta)
+        category="Grains",
+        quantity=50,
+        urgency=Urgency.CRITICAL,
+        submitted_at=date.today() - timedelta(days=2),
+    ),
+    FoodRequest(
+        request_id="REQ-2002",
+        foodbank_id="FB002",  # SoMa needs Bakery (FB000 Bread, FB001 Bagels, FB004 Muffins)
+        category="Bakery",
+        quantity=20,
+        urgency=Urgency.LOW,
+        submitted_at=date.today() - timedelta(days=4),
+    ),
+    FoodRequest(
+        request_id="REQ-2003",
+        foodbank_id="FB003",  # Richmond needs Beverages (FB002 OJ, FB005 Water)
+        category="Beverages",
+        quantity=40,
+        urgency=Urgency.ROUTINE,
+        submitted_at=date.today() - timedelta(days=1),
+    ),
+    FoodRequest(
+        request_id="REQ-2004",
+        foodbank_id="FB004",  # Sunset needs Dairy (FB000 Milk, FB001 Yogurt, FB003 Cheese)
+        category="Dairy",
+        quantity=25,
+        urgency=Urgency.CRITICAL,
+        submitted_at=date.today() - timedelta(days=3),
+    ),
+    FoodRequest(
+        request_id="REQ-2005",
+        foodbank_id="FB005",  # Marina needs Fruits (FB001 Apples, FB003 Bananas)
+        category="Fruits",
+        quantity=30,
+        urgency=Urgency.LOW,
+        submitted_at=date.today() - timedelta(days=6),
+    ),
+]
+
+# The full set of pending requests across the network (our hub + others).
+ALL_REQUESTS = SAMPLE_REQUESTS + CROSS_REQUESTS

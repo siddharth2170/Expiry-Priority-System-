@@ -2,7 +2,7 @@ from datetime import date
 
 import streamlit as st
 
-from src.app_state import add_request, get_requests
+from src.app_state import add_request, get_all_requests
 from src.constants import CATEGORIES
 from src.data import OUR_FOODBANK
 from src.data_structures.request_queue import RequestQueue
@@ -46,7 +46,9 @@ if submitted:
 st.divider()
 st.subheader("Open Requests")
 
-requests = get_requests()
+requests = [
+    r for r in get_all_requests() if r.foodbank_id == OUR_FOODBANK.foodbank_id
+]
 
 if not requests:
     st.info("No requests yet. Raise one above.")

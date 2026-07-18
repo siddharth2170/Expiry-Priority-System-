@@ -93,6 +93,7 @@ class DeliveryGraph:
         pq.push(source, 0.0)
 
         while not pq.is_empty():
+            # The min-heap always hands back the closest unvisited node next.
             node = pq.pop()
             # Lazy deletion: a node can be queued more than once; the first time
             # it pops it carries its final (smallest) distance, so skip repeats.
@@ -102,6 +103,8 @@ class DeliveryGraph:
 
             for neighbor, weight in self._adj.get(node, []):
                 new_dist = dist[node] + weight
+                # Relaxation: if reaching `neighbor` via `node` is cheaper than any
+                # route found so far, record the shorter distance and re-queue it.
                 if neighbor not in dist or new_dist < dist[neighbor]:
                     dist[neighbor] = new_dist
                     pq.push(neighbor, new_dist)
@@ -128,19 +131,22 @@ class DeliveryGraph:
             if node in visited:
                 continue
             visited.add(node)
+            # Once the target is finalized its distance is optimal; stop early.
             if node == target:
                 break
             for neighbor, weight in self._adj.get(node, []):
                 new_dist = dist[node] + weight
                 if neighbor not in dist or new_dist < dist[neighbor]:
                     dist[neighbor] = new_dist
+                    # Remember how we reached `neighbor` so the path can be rebuilt.
                     prev[neighbor] = node
                     pq.push(neighbor, new_dist)
 
         if target not in dist:
             return (None, [])
 
-        # Walk predecessors back from target to source, then reverse.
+        # Walk predecessors back from target to source, then reverse to get the
+        # path in travel order (source -> ... -> target).
         path = [target]
         while path[-1] != source:
             path.append(prev[path[-1]])
@@ -154,12 +160,14 @@ class DeliveryGraph:
         when nothing qualifies.
         """
         dist = self.shortest_distances(source)
-        dist.pop(source, None)
+        dist.pop(source, None)  # never return the source itself
         if candidates is not None:
+            # Keep only the nodes the caller is interested in.
             allowed = set(candidates)
             dist = {n: d for n, d in dist.items() if n in allowed}
         if not dist:
             return None
+        # Pick the closest node; on equal distance, the smaller id wins (stable).
         node = min(dist, key=lambda n: (dist[n], n))
         return (node, dist[node])
 
@@ -173,12 +181,15 @@ class DeliveryGraph:
         """
         graph = cls()
         banks = list(foodbanks)
+        # Register every bank first so isolated banks still exist as nodes.
         for fb in banks:
             graph.add_node(fb.foodbank_id)
+        # j starts at i+1 so each unordered pair is measured exactly once.
         for i in range(len(banks)):
             for j in range(i + 1, len(banks)):
                 a, b = banks[i], banks[j]
                 distance = haversine(a.latitude, a.longitude, b.latitude, b.longitude)
+                # Skip pairs beyond the threshold so far banks route via closer ones.
                 if threshold_km is None or distance <= threshold_km:
                     graph.add_edge(a.foodbank_id, b.foodbank_id, distance)
         return graph
