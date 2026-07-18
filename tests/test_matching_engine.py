@@ -6,7 +6,14 @@ from datetime import date, timedelta
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.data_structures.delivery_graph import DeliveryGraph
-from src.matching.engine import allocate, find_all, find_candidates
+from src.matching.engine import (
+    _distance,
+    _route,
+    allocate,
+    build_path_index,
+    find_all,
+    find_candidates,
+)
 from src.models import Batch, Foodbank, FoodItem, FoodRequest, Urgency
 
 TODAY = date.today()
@@ -216,6 +223,70 @@ class TestAllocate(unittest.TestCase):
         self.assertEqual(allocs["R1"][0].fill_quantity, 10)
         self.assertEqual(allocs["R2"][0].fill_quantity, 5)
         self.assertTrue(allocs["R2"][0].is_partial)
+
+
+class TestPathIndex(unittest.TestCase):
+    """The precomputed path index must agree with graph.shortest_path."""
+
+    def test_distance_and_route_match_shortest_path(self):
+        g = graph_with([("A", "B", 1.0), ("B", "C", 1.0), ("A", "C", 5.0)])
+        paths = build_path_index(g, ["C", "B"])
+        # A->C routes through B (cost 2), matching shortest_path.
+        self.assertEqual(_distance(paths, "A", "C"), 2.0)
+        self.assertEqual(_route(paths, "A", "C"), ["A", "B", "C"])
+        dist, route = g.shortest_path("A", "C")
+        self.assertEqual((_distance(paths, "A", "C"), _route(paths, "A", "C")), (dist, route))
+
+    def test_unreachable_distance_is_none(self):
+        g = graph_with([("A", "B", 1.0)])
+        g.add_node("Z")
+        paths = build_path_index(g, ["Z"])
+        self.assertIsNone(_distance(paths, "A", "Z"))
+        self.assertEqual(_route(paths, "A", "Z"), [])
+
+    def test_dedupes_destinations(self):
+        g = graph_with([("A", "B", 1.0)])
+        paths = build_path_index(g, ["B", "B", "A"])
+        self.assertEqual(set(paths), {"A", "B"})
+
+
+class TestPrecomputedParity(unittest.TestCase):
+    """Passing a prebuilt path index must not change results."""
+
+    def _network(self):
+        s = bank("S", "Dairy", expiry_days=5, quantity=10)
+        d1, d2 = bank("D1"), bank("D2")
+        reqs = [
+            FoodRequest("R1", "D1", "Dairy", 6, Urgency.CRITICAL),
+            FoodRequest("R2", "D2", "Dairy", 6, Urgency.LOW),
+        ]
+        g = graph_with([("S", "D1", 1.0), ("S", "D2", 2.0), ("D1", "D2", 1.0)])
+        return [s, d1, d2], reqs, g
+
+    def _sig(self, allocs):
+        return [
+            (a.source_id, a.dest_id, a.food_item.food_id, a.fill_quantity,
+             round(a.score, 6), tuple(a.route))
+            for a in allocs
+        ]
+
+    def test_allocate_parity_with_and_without_paths(self):
+        foodbanks, reqs, g = self._network()
+        paths = build_path_index(g, [r.foodbank_id for r in reqs])
+        without = allocate(foodbanks, reqs, g, TODAY)
+        with_paths = allocate(foodbanks, reqs, g, TODAY, paths=paths)
+        self.assertEqual(self._sig(without), self._sig(with_paths))
+
+    def test_find_candidates_parity_with_and_without_paths(self):
+        foodbanks, reqs, g = self._network()
+        req = reqs[0]
+        paths = build_path_index(g, [req.foodbank_id])
+        without = find_candidates(req, foodbanks, g, TODAY, top_n=2)
+        with_paths = find_candidates(req, foodbanks, g, TODAY, top_n=2, paths=paths)
+        self.assertEqual(
+            [(c.source_id, c.score, tuple(c.route)) for c in without],
+            [(c.source_id, c.score, tuple(c.route)) for c in with_paths],
+        )
 
 
 class TestFindAll(unittest.TestCase):

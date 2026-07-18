@@ -2,9 +2,17 @@ from datetime import date
 
 import streamlit as st
 
-from src.app_state import confirm_match, get_all_requests, get_donations, get_foodbanks
+from src.app_state import (
+    confirm_match,
+    get_all_requests,
+    get_allocations,
+    get_donations,
+    get_foodbanks,
+    get_graph,
+    get_path_index,
+)
 from src.data_structures.transaction_log import TransactionLog
-from src.matching.engine import allocate, find_candidates, graph_for
+from src.matching.engine import find_candidates
 
 st.set_page_config(page_title="Matches", page_icon="🤝", layout="wide")
 
@@ -48,9 +56,11 @@ st.divider()
 # One global pass scores every (request, source) pairing and hands scarce stock
 # to the best-scoring requests first, so the plan already reflects who wins a
 # contested item. find_candidates is used only to show the ranked alternatives.
-graph = graph_for(foodbanks)
+# Graph and allocation plan are cached in session state (memoized on the network
+# version), so they are not rebuilt when nothing has changed.
+graph = get_graph()
 requests = get_all_requests()
-allocations = allocate(foodbanks, requests, graph, today)
+allocations = get_allocations(today)
 
 # Index the resolved allocations by the request they serve.
 allocs_by_request: dict[str, list] = {}
@@ -77,7 +87,9 @@ else:
 
                 allocs = allocs_by_request.get(request.request_id, [])
                 # Ranked "ideal" sources for this request, ignoring contention.
-                candidates = find_candidates(request, foodbanks, graph, today, top_n=2)
+                candidates = find_candidates(
+                    request, foodbanks, graph, today, top_n=2, paths=get_path_index()
+                )
 
                 if allocs:
                     header = st.columns([3, 3, 2, 2, 2, 2, 2])

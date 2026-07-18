@@ -4,13 +4,19 @@ import folium
 import streamlit as st
 from streamlit_folium import st_folium
 
-from src.app_state import get_all_requests, get_donations, get_foodbanks
+from src.app_state import (
+    get_all_requests,
+    get_allocations,
+    get_donations,
+    get_foodbanks,
+    get_graph,
+    get_inventories,
+    get_path_index,
+)
 from src.constants import DELIVERY_THRESHOLD_KM
 from src.data import OUR_FOODBANK
-from src.data_structures.delivery_graph import DeliveryGraph
 from src.data_structures.expiry_log import ExpiryLog
-from src.data_structures.inventory import Inventory
-from src.matching.engine import allocate, find_candidates
+from src.matching.engine import find_candidates
 
 st.set_page_config(
     page_title="Food Rescue Network",
@@ -34,7 +40,7 @@ by_name = {fb.name: fb for fb in all_foodbanks}
 name_by_id = {fb.foodbank_id: fb.name for fb in all_foodbanks}
 coords = {fb.foodbank_id: [fb.latitude, fb.longitude] for fb in all_foodbanks}
 
-graph = DeliveryGraph.from_foodbanks(all_foodbanks, threshold_km=DELIVERY_THRESHOLD_KM)
+graph = get_graph()
 
 # The clicked bank persists in session state so the map can be redrawn with the
 # route highlighted on the next run.
@@ -43,8 +49,9 @@ selected = by_name.get(st.session_state.get("selected_foodbank"))
 # The engine's current top recommendation for OUR hub, drawn in green. We run the
 # full network allocation (so contention is respected -- our hub only "wins" an
 # item if it out-scores every other bank competing for it) then keep the best
-# transfer that lands at our hub.
-_allocations = allocate(all_foodbanks, get_all_requests(), graph, date.today())
+# transfer that lands at our hub. Memoized on the network version, so idle reruns
+# (like clicking a marker) reuse the plan instead of recomputing it.
+_allocations = get_allocations(date.today())
 _hub_allocs = [a for a in _allocations if a.dest_id == OUR_FOODBANK.foodbank_id]
 recommended = min(_hub_allocs, key=lambda a: a.score) if _hub_allocs else None
 
@@ -65,7 +72,9 @@ def render_match_with_hub(clicked) -> None:
             continue
         # Restrict the source pool to just our hub: a candidate appears only if
         # our hub actually stocks the requested category and can reach them.
-        candidates = find_candidates(req, [hub], graph, today, top_n=1)
+        candidates = find_candidates(
+            req, [hub], graph, today, top_n=1, paths=get_path_index()
+        )
         if not candidates:
             continue
         c = candidates[0]
@@ -190,7 +199,7 @@ with panel_col:
             else:
                 st.caption(f"No delivery route within {DELIVERY_THRESHOLD_KM:.0f} km hops.")
 
-        ordered = Inventory.from_foodbank(selected).items()
+        ordered = get_inventories()[selected.foodbank_id].items()
 
         if not ordered:
             st.info("No inventory recorded for this foodbank.")

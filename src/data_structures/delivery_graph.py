@@ -85,9 +85,19 @@ class DeliveryGraph:
     def neighbors(self, node: str) -> list[tuple[str, float]]:
         return list(self._adj.get(node, []))
 
-    def shortest_distances(self, source: str) -> dict[str, float]:
-        """Dijkstra: shortest distance from ``source`` to every reachable node."""
+    # Optimization: a single source-rooted run answers distance/route to *every*
+    # node at once, so callers Dijkstra once per destination instead of per pair.
+    def dijkstra(self, source: str) -> tuple[dict[str, float], dict[str, str]]:
+        """Single-source Dijkstra returning (distances, predecessors).
+
+        ``dist[node]`` is the shortest distance from ``source`` to ``node``;
+        ``prev[node]`` is the node reached just before ``node`` on that shortest
+        path. Running this once per node (or once per requester) lets callers
+        answer many source->dest distance/route queries by lookup instead of
+        re-running Dijkstra for every pair.
+        """
         dist: dict[str, float] = {source: 0.0}
+        prev: dict[str, str] = {}
         visited: set[str] = set()
         pq = PriorityQueue()
         pq.push(source, 0.0)
@@ -107,7 +117,13 @@ class DeliveryGraph:
                 # route found so far, record the shorter distance and re-queue it.
                 if neighbor not in dist or new_dist < dist[neighbor]:
                     dist[neighbor] = new_dist
+                    prev[neighbor] = node
                     pq.push(neighbor, new_dist)
+        return dist, prev
+
+    def shortest_distances(self, source: str) -> dict[str, float]:
+        """Dijkstra: shortest distance from ``source`` to every reachable node."""
+        dist, _ = self.dijkstra(source)
         return dist
 
     def shortest_path(self, source: str, target: str) -> tuple[float | None, list[str]]:
@@ -184,12 +200,66 @@ class DeliveryGraph:
         # Register every bank first so isolated banks still exist as nodes.
         for fb in banks:
             graph.add_node(fb.foodbank_id)
-        # j starts at i+1 so each unordered pair is measured exactly once.
-        for i in range(len(banks)):
-            for j in range(i + 1, len(banks)):
-                a, b = banks[i], banks[j]
-                distance = haversine(a.latitude, a.longitude, b.latitude, b.longitude)
-                # Skip pairs beyond the threshold so far banks route via closer ones.
-                if threshold_km is None or distance <= threshold_km:
+
+        if threshold_km is None:
+            # Dense graph: every pair is connected, so O(V^2) is unavoidable.
+            # j starts at i+1 so each unordered pair is measured exactly once.
+            for i in range(len(banks)):
+                for j in range(i + 1, len(banks)):
+                    a, b = banks[i], banks[j]
+                    distance = haversine(a.latitude, a.longitude, b.latitude, b.longitude)
                     graph.add_edge(a.foodbank_id, b.foodbank_id, distance)
+            return graph
+
+        # Optimization: with a threshold most pairs are too far to link, so bucket
+        # banks spatially and only measure nearby ones instead of all O(V^2) pairs.
+        cls._add_edges_via_grid(graph, banks, threshold_km)
         return graph
+
+    @staticmethod
+    def _add_edges_via_grid(graph: "DeliveryGraph", banks, threshold_km: float) -> None:
+        """Add threshold edges using a spatial grid to avoid the O(V^2) scan.
+
+        Coordinates are projected to an approximate local km plane and bucketed
+        into cells of side ``threshold_km``. Two banks within ``threshold_km``
+        must fall in the same or an adjacent cell, so scanning each bank's 3x3
+        cell window finds every candidate pair. ``kx`` uses the smallest cos
+        (the highest |latitude| in the set) so east-west distance is never
+        over-estimated -- guaranteeing no close pair is ever missed. The exact
+        haversine still gates each edge, so the result matches the dense scan.
+        """
+        if not banks:
+            return
+        ky = 111.0  # km per degree of latitude (roughly constant)
+        max_abs_lat = max(abs(b.latitude) for b in banks)
+        kx = 111.0 * math.cos(math.radians(max_abs_lat)) or 1e-9  # km per deg longitude
+
+        def cell(b) -> tuple[int, int]:
+            return (
+                int((b.longitude * kx) // threshold_km),
+                int((b.latitude * ky) // threshold_km),
+            )
+
+        grid: dict[tuple[int, int], list] = {}
+        for b in banks:
+            grid.setdefault(cell(b), []).append(b)
+
+        seen: set[frozenset] = set()
+        for b in banks:
+            cx, cy = cell(b)
+            # Only compare against banks in this cell and the 8 neighbours.
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    for other in grid.get((cx + dx, cy + dy), []):
+                        if other is b:
+                            continue
+                        key = frozenset((b.foodbank_id, other.foodbank_id))
+                        if key in seen:
+                            continue  # each unordered pair measured once
+                        seen.add(key)
+                        distance = haversine(
+                            b.latitude, b.longitude, other.latitude, other.longitude
+                        )
+                        # Exact gate: the grid only prunes far pairs, never decides.
+                        if distance <= threshold_km:
+                            graph.add_edge(b.foodbank_id, other.foodbank_id, distance)

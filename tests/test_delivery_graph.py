@@ -122,5 +122,95 @@ class TestDeliveryGraph(unittest.TestCase):
         self.assertAlmostEqual(distance, haversine(0, 0, 0, 1) + haversine(0, 1, 0, 2), places=6)
 
 
+class TestDijkstra(unittest.TestCase):
+    def _triangle(self):
+        g = DeliveryGraph()
+        g.add_edge("A", "B", 1.0)
+        g.add_edge("B", "C", 1.0)
+        g.add_edge("A", "C", 5.0)
+        return g
+
+    def test_distances_match_shortest_distances(self):
+        """dijkstra distances agree with shortest_distances."""
+        g = self._triangle()
+        dist, _ = g.dijkstra("A")
+        self.assertEqual(dist, g.shortest_distances("A"))
+
+    def test_predecessors_rebuild_shortest_path(self):
+        """Walking predecessors from source rebuilds the shortest_path route."""
+        g = self._triangle()
+        dist, prev = g.dijkstra("C")  # root at the destination (graph is undirected)
+        # Rebuild A->C by following predecessors from A toward C.
+        path = ["A"]
+        while path[-1] != "C":
+            path.append(prev[path[-1]])
+        self.assertEqual(path, ["A", "B", "C"])
+        self.assertEqual(dist["A"], 2.0)
+
+    def test_unreachable_absent_from_distances(self):
+        """An isolated node never appears in the distance map."""
+        g = self._triangle()
+        g.add_node("Z")
+        dist, prev = g.dijkstra("A")
+        self.assertNotIn("Z", dist)
+        self.assertNotIn("Z", prev)
+
+
+class TestGridConstruction(unittest.TestCase):
+    """The spatial-grid builder must yield the exact same edges as brute force."""
+
+    def _brute_force(self, banks, threshold_km):
+        g = DeliveryGraph()
+        for fb in banks:
+            g.add_node(fb.foodbank_id)
+        for i in range(len(banks)):
+            for j in range(i + 1, len(banks)):
+                a, b = banks[i], banks[j]
+                d = haversine(a.latitude, a.longitude, b.latitude, b.longitude)
+                if d <= threshold_km:
+                    g.add_edge(a.foodbank_id, b.foodbank_id, d)
+        return g
+
+    def _edge_set(self, g):
+        return {frozenset((n, nb)) for n in g.nodes() for nb, _ in g.neighbors(n)}
+
+    def test_grid_matches_brute_force_various_thresholds(self):
+        """Grid edges equal brute-force edges across a spread of thresholds."""
+        banks = [
+            bank("A", 37.77, -122.41),
+            bank("B", 37.80, -122.46),
+            bank("C", 37.75, -122.39),
+            bank("D", 37.72, -122.48),
+            bank("E", 38.10, -122.20),
+        ]
+        for thr in [0.5, 1.0, 2.5, 5.0, 10.0, 50.0, 200.0]:
+            grid = DeliveryGraph.from_foodbanks(banks, threshold_km=thr)
+            brute = self._brute_force(banks, thr)
+            self.assertEqual(
+                self._edge_set(grid), self._edge_set(brute), msg=f"threshold={thr}"
+            )
+
+    def test_grid_matches_brute_force_high_latitude(self):
+        """Correct near the poles, where longitude degrees are short (kx small)."""
+        banks = [
+            bank("A", 69.0, 18.0),
+            bank("B", 69.0, 18.5),
+            bank("C", 69.2, 18.1),
+            bank("D", 60.0, 10.0),
+        ]
+        for thr in [1.0, 5.0, 20.0, 30.0, 100.0]:
+            grid = DeliveryGraph.from_foodbanks(banks, threshold_km=thr)
+            brute = self._brute_force(banks, thr)
+            self.assertEqual(
+                self._edge_set(grid), self._edge_set(brute), msg=f"threshold={thr}"
+            )
+
+    def test_grid_handles_empty_and_single(self):
+        """Empty and single-bank inputs produce no edges and don't error."""
+        self.assertEqual(len(DeliveryGraph.from_foodbanks([], threshold_km=5.0)), 0)
+        g = DeliveryGraph.from_foodbanks([bank("A", 0.0, 0.0)], threshold_km=5.0)
+        self.assertEqual(g.neighbors("A"), [])
+
+
 if __name__ == "__main__":
     unittest.main()
