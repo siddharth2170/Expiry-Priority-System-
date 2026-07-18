@@ -40,29 +40,30 @@ class TestInventory(unittest.TestCase):
             self.inv.add(it)
 
     def test_items_sorted_by_expiry(self):
+        """items() returns every active batch ordered soonest-to-expire first."""
         expiries = [batch.expiry_date for _, batch in self.inv.items()]
         self.assertEqual(expiries, sorted(expiries))
 
     def test_same_product_yields_one_row_per_active_batch(self):
+        """A product with two active batches appears as two separate rows."""
         names = [it.name for it, _ in self.inv.items()]
         self.assertEqual(names.count("Bread"), 2)
 
     def test_fully_expired_product_excluded(self):
+        """A product whose batches are all expired is left out of usable stock and totals."""
         names = [it.name for it, _ in self.inv.items()]
         self.assertNotIn("Yogurt", names)
-        # ...and it should not count toward category totals either.
         self.assertEqual(self.inv.total_quantity("Dairy"), 60)
 
     def test_peek_most_urgent_overall(self):
+        """peek_most_urgent() returns the soonest batch network-wide without removing it."""
         it, batch = self.inv.peek_most_urgent()
         self.assertEqual(it.name, "Bread")
         self.assertEqual(batch.expiry_date, days(2))
-        # peek must not remove anything
         self.assertEqual(len(self.inv.items()), 3)
 
     def test_pop_most_urgent_drains_in_expiry_order(self):
-        # pop_most_urgent is a heap primitive: each call returns the next
-        # soonest-to-expire active batch, and the expired yogurt is never served.
+        """pop_most_urgent() serves batches soonest-first and never serves expired ones."""
         popped = []
         while True:
             line = self.inv.pop_most_urgent()
@@ -72,38 +73,42 @@ class TestInventory(unittest.TestCase):
         self.assertEqual(popped, [days(2), days(4), days(6)])
 
     def test_by_category_filters_and_orders(self):
+        """by_category() returns only that category's active batches, expiry-ordered."""
         bakery = self.inv.by_category("Bakery")
         self.assertEqual({it.name for it, _ in bakery}, {"Bread"})
         self.assertEqual([b.expiry_date for _, b in bakery], [days(2), days(6)])
 
     def test_total_quantity_active_only(self):
+        """total_quantity() sums a category's active batch quantities."""
         self.assertEqual(self.inv.total_quantity("Bakery"), 55)  # 30 + 25
 
     def test_remove_is_lazy_but_excluded_from_reads(self):
+        """remove() hides a product from reads immediately; pops skip its stale lines."""
         self.assertTrue(self.inv.remove("F1"))
         names = [it.name for it, _ in self.inv.items()]
         self.assertNotIn("Bread", names)
-        # popping should now surface Milk (next soonest), skipping removed lines
         it, _ = self.inv.pop_most_urgent()
         self.assertEqual(it.name, "Milk")
 
     def test_remove_unknown_returns_false(self):
+        """remove() of an unknown id reports False and changes nothing."""
         self.assertFalse(self.inv.remove("NOPE"))
 
     def test_peek_unknown_category_returns_none(self):
+        """peek_most_urgent() for a category with no stock returns None."""
         self.assertIsNone(self.inv.peek_most_urgent("Frozen"))
 
     def test_tie_on_same_expiry_keeps_both_and_is_deterministic(self):
-        # Edge case: two active batches with identical expiry dates.
+        """Two active batches with identical expiry dates both appear, in insertion order."""
         tie = item("F9", "Buns", "Bakery", [Batch(days(1), 5), Batch(days(1), 7)])
         inv = Inventory()
         inv.add(tie)
         lines = inv.by_category("Bakery")
         self.assertEqual(len(lines), 2)
-        # Stable order (insertion order preserved for equal priority).
         self.assertEqual([b.quantity for _, b in lines], [5, 7])
 
     def test_from_foodbank_builds_from_food_items(self):
+        """from_foodbank() loads every batch of every product on the foodbank."""
         fb = Foodbank(
             foodbank_id="FB001",
             name="Test Bank",
@@ -117,6 +122,7 @@ class TestInventory(unittest.TestCase):
         self.assertEqual(len(inv.items()), 3)  # 2 bread batches + 1 milk
 
     def test_empty_inventory(self):
+        """An empty inventory yields no items and None for peek/pop."""
         inv = Inventory()
         self.assertEqual(inv.items(), [])
         self.assertIsNone(inv.peek_most_urgent())

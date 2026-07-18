@@ -20,26 +20,30 @@ def make_request(quantity, urgency=Urgency.ROUTINE):
 
 class TestFoodRequest(unittest.TestCase):
     def test_valid_request_constructs(self):
+        """A request with a positive quantity is created and defaults submitted_at to today."""
         req = make_request(5, Urgency.CRITICAL)
         self.assertEqual(req.quantity, 5)
         self.assertEqual(req.urgency, Urgency.CRITICAL)
         self.assertEqual(req.submitted_at, date.today())
 
     def test_zero_quantity_rejected(self):
+        """A quantity of zero raises ValueError at construction."""
         with self.assertRaises(ValueError):
             make_request(0)
 
     def test_negative_quantity_rejected(self):
+        """A negative quantity raises ValueError at construction."""
         with self.assertRaises(ValueError):
             make_request(-5)
 
     def test_urgency_orders_as_priority_rank(self):
-        # Lower value = higher priority, so the enum value can be a queue rank.
+        """Urgency values increase from CRITICAL so a lower value = higher priority."""
         self.assertLess(Urgency.CRITICAL, Urgency.LOW)
         self.assertLess(Urgency.LOW, Urgency.ROUTINE)
         self.assertEqual(int(Urgency.CRITICAL), 0)
 
     def test_urgency_sort_by_value(self):
+        """Sorting urgencies yields CRITICAL, then LOW, then ROUTINE."""
         order = sorted([Urgency.ROUTINE, Urgency.CRITICAL, Urgency.LOW])
         self.assertEqual(order, [Urgency.CRITICAL, Urgency.LOW, Urgency.ROUTINE])
 

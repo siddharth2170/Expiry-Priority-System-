@@ -51,23 +51,26 @@ class TestExpiryLog(unittest.TestCase):
         self.banks = [foodbank("FB001", [bagels]), foodbank("FB002", [sandwiches, milk])]
 
     def test_records_only_expired_batches(self):
+        """from_foodbanks() logs expired batches only and skips active stock."""
         log = ExpiryLog.from_foodbanks(self.banks)
         self.assertEqual(len(log), 2)
         names = sorted(it.name for it, _ in log.all())
         self.assertEqual(names, ["Bagels", "Sandwiches"])
 
     def test_expired_batch_keeps_product_name(self):
-        # The expired batch is logged under the real product name, not a variant.
+        """An expired batch is logged under its real product name, not a variant."""
         log = ExpiryLog.from_foodbanks(self.banks)
         bagel_entries = [b for it, b in log.all() if it.name == "Bagels"]
         self.assertEqual(len(bagel_entries), 1)
         self.assertEqual(bagel_entries[0].quantity, 15)
 
     def test_total_expired_quantity(self):
+        """total_expired_quantity() sums the quantity of every logged expired batch."""
         log = ExpiryLog.from_foodbanks(self.banks)
         self.assertEqual(log.total_expired_quantity(), 27)  # 15 + 12
 
     def test_grouped_by_foodbank(self):
+        """grouped_by_foodbank() buckets expired entries under each foodbank id."""
         log = ExpiryLog.from_foodbanks(self.banks)
         grouped = log.grouped_by_foodbank()
         self.assertEqual(set(grouped), {"FB001", "FB002"})
@@ -75,17 +78,20 @@ class TestExpiryLog(unittest.TestCase):
         self.assertEqual(len(grouped["FB002"]), 1)
 
     def test_for_foodbank_filters(self):
+        """for_foodbank() returns only that bank's entries (empty list if none)."""
         log = ExpiryLog.from_foodbanks(self.banks)
         self.assertEqual(len(log.for_foodbank("FB001")), 1)
         self.assertEqual(log.for_foodbank("NONE"), [])
 
     def test_empty_when_nothing_expired(self):
+        """A network with only fresh stock produces an empty log."""
         fresh = foodbank("FB003", [item("F4", "Rice", "FB003", [Batch(TODAY + timedelta(days=90), 200)])])
         log = ExpiryLog.from_foodbanks([fresh])
         self.assertEqual(len(log), 0)
         self.assertEqual(log.total_expired_quantity(), 0)
 
     def test_manual_append(self):
+        """append() adds a single (product, batch) entry to the log."""
         log = ExpiryLog()
         it = item("F5", "Cake", "FB004", [Batch(TODAY - timedelta(days=1), 3)])
         log.append(it, it.batches[0])
