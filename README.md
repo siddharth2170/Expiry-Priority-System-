@@ -103,3 +103,13 @@ partial fills), and the `TransactionLog` / match execution.
 Foodbank, inventory, and request data is seeded from `src/data/sample_data.py`.
 Session state (each browser session's mutable copy of the network) lives in
 `src/app_state.py`.
+
+## Performance & scalability
+
+The pipeline includes four scalability optimizations: precomputed shortest paths
+(one Dijkstra per destination, served by lookup), spatial-grid graph
+construction (avoids the `O(V^2)` distance scan), cross-rerun caching with
+in-place inventory updates (Streamlit reruns reuse derived structures), and the
+contention-aware allocation described above. Each is documented — problem,
+change, code location, complexity, tests, and how to tune in — in
+[`OPTIMIZATIONS.md`](OPTIMIZATIONS.md).
